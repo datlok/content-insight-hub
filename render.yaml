@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: content-insight-hub
+    runtime: docker
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: content-insight-db
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_TEXT_MODEL
+        value: gpt-5-mini
+      - key: OPENAI_VISION_MODEL
+        value: gpt-5-mini
+      - key: OPENAI_TRANSCRIBE_MODEL
+        value: gpt-4o-mini-transcribe
+
+databases:
+  - name: content-insight-db
+    plan: free
+    databaseName: content_insight
