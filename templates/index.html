@@ -1,0 +1,65 @@
+
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Content Insight Hub</title>
+  <link rel="stylesheet" href="/static/app.css"/>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <div class="brand">
+      <div class="logo">CI</div>
+      <div><b>Content Insight</b><small>Team Workspace</small></div>
+    </div>
+    <nav>
+      <button class="nav active" data-view="inbox">＋ Add Insight</button>
+      <button class="nav" data-view="library">▦ Insight Library</button>
+    </nav>
+    <div class="aside-note">Upload text, screenshot, poster, carousel hoặc video. AI sẽ đọc source và rút insight có thể triển khai thành content.</div>
+  </aside>
+
+  <main>
+    <section id="inbox" class="view active">
+      <header><div><h1>Insight Inbox</h1><p>Biến source thô thành insight dùng được.</p></div><span class="pill">AI assisted</span></header>
+
+      <div class="composer card">
+        <div class="tabs">
+          <button class="tab active" data-tab="text">Text</button>
+          <button class="tab" data-tab="file">Ảnh / Video</button>
+        </div>
+
+        <div id="tab-text" class="tabpane active">
+          <input id="textName" class="title-input" placeholder="Tên source, ví dụ: Comment khách hàng / Trend TikTok"/>
+          <textarea id="textInput" placeholder="Paste caption, comment, feedback khách hàng, transcript, ghi chú trend..."></textarea>
+          <div class="actions"><span class="hint">AI sẽ phân biệt tóm tắt và insight.</span><button id="analyzeText">Phân tích insight →</button></div>
+        </div>
+
+        <div id="tab-file" class="tabpane">
+          <label id="drop" class="drop">
+            <input id="fileInput" type="file" accept="image/*,video/*"/>
+            <div class="drop-icon">↑</div>
+            <b>Thả ảnh hoặc video vào đây</b>
+            <span>Ảnh: OCR + hiểu hình ảnh · Video: transcript + phân tích frame</span>
+          </label>
+          <div id="fileMeta" class="file-meta"></div>
+          <div class="actions"><span class="hint">Video dài sẽ cần nhiều thời gian xử lý hơn.</span><button id="analyzeFile">Upload & phân tích →</button></div>
+        </div>
+      </div>
+
+      <div id="loading" class="loading hidden"><span></span><div><b>AI đang xử lý source…</b><small>Đọc nội dung → tìm tension → rút insight → đề xuất angle</small></div></div>
+      <div id="result"></div>
+    </section>
+
+    <section id="library" class="view">
+      <header><div><h1>Insight Library</h1><p>Kho insight chung cho cả team.</p></div></header>
+      <div class="toolbar"><input id="search" placeholder="Tìm insight, tag, source…"/><button id="refresh">↻</button></div>
+      <div id="libraryGrid" class="library-grid"></div>
+    </section>
+  </main>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>
