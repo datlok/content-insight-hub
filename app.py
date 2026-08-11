@@ -240,24 +240,63 @@ def save_insight(source_type, source_name, raw_text, insight):
 
 
 def write_content_versions(insight_text, platform="Facebook", objective="Bán hàng", extra_request=""):
-    prompt = f"""Bạn là Senior Social Content Writer.
-Dựa trên insight dưới đây, viết ĐÚNG 2 phiên bản content. Không tạo storytelling riêng.
+    prompt = f"""Bạn là Content Lead của một studio chụp ảnh cá nhân tại Việt Nam.
+Nhiệm vụ là biến INSIGHT thành content có thể đăng thật, không phải bài mẫu chung chung.
 
-INSIGHT:
+CONTEXT / INSIGHT:
 {insight_text}
 
 NỀN TẢNG: {platform}
 MỤC TIÊU: {objective}
-YÊU CẦU THÊM: {extra_request or "Không có"}
+YÊU CẦU THÊM CỦA TEAM:
+{extra_request or "Không có"}
+
+PHONG CÁCH BẮT BUỘC:
+- Tiếng Việt tự nhiên, hiện đại, có cảm giác người thật viết.
+- Không dùng văn phong sáo rỗng kiểu: "không chỉ... mà còn...", "hành trình", "chạm đến", "nâng tầm", "tỏa sáng", "phiên bản tốt nhất của bạn" nếu không thật sự cần.
+- Không giảng giải insight. Hãy biến insight thành một góc nói khiến khách thấy "đúng là mình".
+- Không mở bài bằng định nghĩa, câu hỏi quá chung chung hoặc lời quảng cáo.
+- Ưu tiên câu ngắn, nhịp đọc tốt, có khoảng nghỉ.
+- Có thể dùng ngôn ngữ đời thường nhưng không suồng sã quá mức.
+- Không tự bịa giá, khuyến mãi, số liệu, tên concept hoặc quyền lợi không có trong input.
+- Không hashtag trừ khi team yêu cầu.
+- Không emoji trừ khi thật sự hợp ngữ cảnh.
+- Không viết kiểu AI, không lặp lại cùng một ý bằng nhiều câu.
+- Nếu insight nói về nỗi lo/ngại của khách, đừng phủ nhận cảm xúc; hãy cho thấy studio hiểu vấn đề rồi chuyển sang cách giải quyết cụ thể.
+- CTA ngắn, tự nhiên, không ép mua.
+
+CHỈ TẠO ĐÚNG 2 PHIÊN BẢN:
+
+VERSION 1 — ORGANIC / HOOK MẠNH
+- Dùng cho post social organic.
+- Mở bằng 1 hook cụ thể, có tension hoặc observation.
+- 80–160 từ.
+- Mục tiêu: khiến đúng nhóm khách dừng lại và thấy mình trong đó.
+- Có thể kết nhẹ bằng một câu gợi mở, không cần bán hàng mạnh.
+
+VERSION 2 — CONVERSION / CTA
+- Cùng insight nhưng triển khai theo hướng thuyết phục đặt lịch/inbox.
+- 120–220 từ.
+- Vẫn phải tự nhiên; bán hàng bằng việc giải tỏa rào cản và cho thấy trải nghiệm khách nhận được.
+- CTA cuối bài chỉ 1–2 câu.
 
 Trả về CHỈ JSON hợp lệ:
 {{
-  "short_hook": {{"title":"Phiên bản 1 — Hook mạnh","content":"Nội dung hoàn chỉnh"}},
-  "sales_cta": {{"title":"Phiên bản 2 — Bán hàng / CTA","content":"Nội dung hoàn chỉnh"}}
+  "short_hook": {{
+    "title": "Phiên bản 1 — Organic / Hook mạnh",
+    "content": "Nội dung hoàn chỉnh"
+  }},
+  "sales_cta": {{
+    "title": "Phiên bản 2 — Conversion / CTA",
+    "content": "Nội dung hoàn chỉnh"
+  }}
 }}
-Phiên bản 1: ngắn, hook mạnh, dễ đọc, giữ attention.
-Phiên bản 2: thuyết phục hơn, hướng tới chuyển đổi nhưng không quảng cáo lộ liễu.
-Không bịa giá, ưu đãi hoặc số liệu."""
+
+Trước khi trả kết quả, tự kiểm tra:
+1. Hai phiên bản có khác nhau rõ rệt không?
+2. Có câu nào nghe như AI hoặc quảng cáo sáo rỗng không? Nếu có, viết lại.
+3. Hook có xuất phát trực tiếp từ tension/behavior trong insight không?
+4. Có bịa thông tin không? Nếu có, xóa."""
     raw = openai_response([{"type":"input_text","text":prompt}], TEXT_MODEL)
     return parse_json_loose(raw)
 

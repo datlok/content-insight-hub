@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Content Insight Hub</title><link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="shell">
+<aside>
+  <div class="brand"><div class="logo">CI</div><div><b>Content Insight</b><small>Team Workspace</small></div></div>
+  <nav>
+    <button class="nav active" data-view="inbox">＋ Add Insight</button>
+    <button class="nav" data-view="library">▦ Insight Library</button>
+    <button class="nav" data-view="writer">✎ Content Writer</button>
+    <button class="nav" data-view="design">◇ Design Creator</button>
+  </nav>
+  <div class="aside-note">Source → Insight → Content → Design.</div>
+</aside>
+<main>
+<section id="inbox" class="view active">
+<header><div><h1>Insight Inbox</h1><p>Biến source thô thành insight dùng được.</p></div><span class="pill">AI assisted</span></header>
+<div class="card composer">
+  <div class="tabs"><button class="tab active" data-tab="text">Text</button><button class="tab" data-tab="file">Ảnh / Video</button></div>
+  <div id="tab-text" class="tabpane active">
+    <input id="textName" class="title-input" placeholder="Tên source, ví dụ: Comment khách hàng / Trend TikTok">
+    <textarea id="textInput" placeholder="Paste caption, comment, feedback, transcript, ghi chú trend..."></textarea>
+    <div class="actions"><span class="hint">AI sẽ phân biệt tóm tắt và insight.</span><button class="primary" id="analyzeText">Phân tích insight →</button></div>
+  </div>
+  <div id="tab-file" class="tabpane">
+    <label class="drop"><input id="fileInput" type="file" accept="image/*,video/*"><div class="drop-icon">↑</div><b>Thả ảnh hoặc video vào đây</b><span>Ảnh: OCR + hiểu hình ảnh · Video: transcript + phân tích frame</span></label>
+    <div id="fileMeta" class="file-meta"></div>
+    <div class="actions"><span class="hint">Video dài sẽ cần nhiều thời gian xử lý hơn.</span><button class="primary" id="analyzeFile">Upload & phân tích →</button></div>
+  </div>
+</div>
+<div id="loading" class="loading hidden"><span></span><div><b>AI đang xử lý source…</b></div></div>
+<div id="result"></div>
+</section>
+
+<section id="library" class="view">
+<header><div><h1>Insight Library</h1><p>Kho insight chung cho cả team.</p></div></header>
+<div class="toolbar"><input id="search" placeholder="Tìm insight, tag, source…"><button id="refresh">↻</button></div>
+<div id="libraryGrid" class="library-grid"></div>
+</section>
+
+<section id="writer" class="view">
+<header><div><h1>Content Writer</h1><p>Từ insight → tự viết ngay 2 phiên bản có thể đăng.</p></div><span class="pill">2 versions</span></header>
+<div class="card section-card">
+  <label class="field-label">Insight / ý chính</label>
+  <textarea id="writerInsight" class="writer-textarea" placeholder="Paste insight hoặc bấm Viết content từ Insight Library…"></textarea>
+  <div class="form-row">
+    <div><label class="field-label">Nền tảng</label><select id="writerPlatform"><option>Facebook</option><option>TikTok</option><option>Instagram</option><option>Threads</option></select></div>
+    <div><label class="field-label">Mục tiêu</label><select id="writerObjective"><option>Bán hàng</option><option>Tăng tương tác</option><option>Branding</option><option>Giáo dục</option></select></div>
+  </div>
+  <label class="field-label">Yêu cầu thêm</label>
+  <textarea id="writerExtra" class="small-textarea" placeholder="Ví dụ: giọng gần gũi hơn, tránh dùng từ “nàng”, CTA inbox nhẹ, ưu tiên caption ngắn…"></textarea>
+  <div class="actions"><span class="hint">Không tạo storytelling riêng.</span><button class="primary" id="generateContent">Tạo 2 phiên bản →</button></div>
+</div>
+<div id="writerLoading" class="loading hidden"><span></span><div><b>Đang viết content…</b></div></div>
+<div id="writerResult" class="content-results"></div>
+</section>
+
+<section id="design" class="view">
+<header><div><h1>Design Creator</h1><p>Ảnh ref Pinterest + ảnh bên mình + yêu cầu → design mới.</p></div><span class="pill">GPT Image</span></header>
+<div class="card section-card">
+  <div class="image-pair">
+    <div><label class="field-label">1. Ảnh ref design Pinterest</label>
+      <label class="image-drop"><input id="designRef" type="file" accept="image/*"><img id="refPreview"><div class="empty-preview"><b>＋ Upload reference</b><span>Layout / typography / mood</span></div></label>
+    </div>
+    <div><label class="field-label">2. Ảnh chụp bên mình</label>
+      <label class="image-drop"><input id="designPhoto" type="file" accept="image/*"><img id="photoPreview"><div class="empty-preview"><b>＋ Upload ảnh chụp</b><span>Ảnh chính đưa vào design</span></div></label>
+    </div>
+  </div>
+  <label class="field-label">3. Yêu cầu thiết kế</label>
+  <textarea id="designInstruction" class="design-request" placeholder="Ví dụ: giữ tinh thần layout ref, thay ảnh chính bằng ảnh bên mình, text SUMMER SALE, tone beige premium…"></textarea>
+  <div class="form-row"><div><label class="field-label">Tỷ lệ</label><select id="designSize"><option value="1024x1024">1:1 Square</option><option value="1024x1536">2:3 Vertical</option><option value="1536x1024">3:2 Horizontal</option></select></div></div>
+  <div class="actions"><span class="hint">Không bê nguyên watermark/logo từ ref.</span><button class="primary" id="generateDesign">Tạo design →</button></div>
+</div>
+<div id="designLoading" class="loading hidden"><span></span><div><b>Đang tạo design…</b><small>Có thể mất vài chục giây.</small></div></div>
+<div id="designResult"></div>
+</section>
+</main>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>
