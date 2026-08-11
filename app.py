@@ -15,6 +15,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-5-mini")
 VISION_MODEL = os.getenv("OPENAI_VISION_MODEL", TEXT_MODEL)
 TRANSCRIBE_MODEL = os.getenv("OPENAI_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe")
+IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2")
 
 def database_uri():
     url = os.getenv("DATABASE_URL", "").strip()
@@ -237,6 +238,73 @@ def save_insight(source_type, source_name, raw_text, insight):
     db.session.commit()
     return item.id
 
+
+def write_content_versions(insight_text, platform="Facebook", objective="Bán hàng", extra_request=""):
+    prompt = f"""Bạn là Senior Social Content Writer.
+Dựa trên insight dưới đây, viết ĐÚNG 2 phiên bản content. Không tạo storytelling riêng.
+
+INSIGHT:
+{insight_text}
+
+NỀN TẢNG: {platform}
+MỤC TIÊU: {objective}
+YÊU CẦU THÊM: {extra_request or "Không có"}
+
+Trả về CHỈ JSON hợp lệ:
+{{
+  "short_hook": {{"title":"Phiên bản 1 — Hook mạnh","content":"Nội dung hoàn chỉnh"}},
+  "sales_cta": {{"title":"Phiên bản 2 — Bán hàng / CTA","content":"Nội dung hoàn chỉnh"}}
+}}
+Phiên bản 1: ngắn, hook mạnh, dễ đọc, giữ attention.
+Phiên bản 2: thuyết phục hơn, hướng tới chuyển đổi nhưng không quảng cáo lộ liễu.
+Không bịa giá, ưu đãi hoặc số liệu."""
+    raw = openai_response([{"type":"input_text","text":prompt}], TEXT_MODEL)
+    return parse_json_loose(raw)
+
+def generate_design_from_refs(ref_path, photo_path, instruction, size="1024x1024"):
+    if not OPENAI_API_KEY:
+        raise RuntimeError("Chưa cấu hình OPENAI_API_KEY trên Render.")
+    prompt = f"""Tạo một social design MỚI dựa trên hai ảnh input.
+
+Ảnh 1 = REFERENCE DESIGN:
+- Học bố cục, hierarchy, spacing, typography treatment, màu sắc và mood.
+- Không sao chép logo, watermark, tên thương hiệu hoặc nội dung chữ từ reference.
+
+Ảnh 2 = ẢNH CHỤP CỦA TEAM:
+- Đây là chủ thể/nội dung chính phải dùng trong thiết kế mới.
+- Giữ nhận diện và chi tiết quan trọng của ảnh này tốt nhất có thể.
+
+YÊU CẦU:
+{instruction}
+
+Tạo thiết kế mới có tinh thần/layout tham khảo từ ảnh 1 nhưng dùng ảnh 2 làm nội dung chính.
+Nếu có text tiếng Việt, ưu tiên rõ, đúng chính tả và hierarchy tốt."""
+    handles, files = [], []
+    try:
+        for p in [ref_path, photo_path]:
+            h = open(p, "rb")
+            handles.append(h)
+            files.append(("image[]", (Path(p).name, h, mimetypes.guess_type(str(p))[0] or "image/png")))
+        r = requests.post(
+            "https://api.openai.com/v1/images/edits",
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+            data={"model": IMAGE_MODEL, "prompt": prompt, "size": size, "quality": "medium"},
+            files=files,
+            timeout=420,
+        )
+        if not r.ok:
+            raise RuntimeError(f"Image API error {r.status_code}: {r.text[:1200]}")
+        b64 = r.json().get("data", [{}])[0].get("b64_json")
+        if not b64:
+            raise RuntimeError("Image API không trả về ảnh.")
+        return b64
+    finally:
+        for h in handles:
+            try:
+                h.close()
+            except Exception:
+                pass
+
 @app.get("/")
 def home():
     return render_template("index.html")
@@ -321,6 +389,55 @@ def analyze_file_route():
             pass
         if tmp:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+@app.post("/api/write-content")
+def write_content_route():
+    data = request.get_json(force=True)
+    insight = (data.get("insight") or "").strip()
+    if not insight:
+        return jsonify({"error": "Chưa có insight để viết content."}), 400
+    try:
+        result = write_content_versions(
+            insight,
+            (data.get("platform") or "Facebook").strip(),
+            (data.get("objective") or "Bán hàng").strip(),
+            (data.get("extra_request") or "").strip(),
+        )
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.post("/api/generate-design")
+def generate_design_route():
+    ref = request.files.get("reference")
+    photo = request.files.get("photo")
+    instruction = (request.form.get("instruction") or "").strip()
+    size = (request.form.get("size") or "1024x1024").strip()
+
+    if not ref or not ref.filename:
+        return jsonify({"error": "Hãy upload ảnh reference design."}), 400
+    if not photo or not photo.filename:
+        return jsonify({"error": "Hãy upload ảnh chụp bên mình."}), 400
+    if not instruction:
+        return jsonify({"error": "Hãy nhập yêu cầu thiết kế."}), 400
+    if size not in ["1024x1024", "1536x1024", "1024x1536"]:
+        size = "1024x1024"
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    ref_path = UPLOAD_DIR / f"ref_{stamp}_{re.sub(r'[^A-Za-z0-9._ -]+', '_', ref.filename)}"
+    photo_path = UPLOAD_DIR / f"photo_{stamp}_{re.sub(r'[^A-Za-z0-9._ -]+', '_', photo.filename)}"
+    ref.save(ref_path)
+    photo.save(photo_path)
+
+    try:
+        b64 = generate_design_from_refs(ref_path, photo_path, instruction, size)
+        return jsonify({"image_base64": b64, "mime": "image/png"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        ref_path.unlink(missing_ok=True)
+        photo_path.unlink(missing_ok=True)
 
 @app.post("/api/insights/<int:item_id>/status")
 def set_status(item_id):

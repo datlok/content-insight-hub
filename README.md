@@ -1,73 +1,44 @@
+# Content Insight Hub — Render-ready
 
-# Content Insight Hub — MVP
+Internal Content Insight app:
+- Text -> insight
+- Image -> OCR/visual understanding -> insight
+- Video -> ffmpeg audio transcription + sampled visual frames -> insight
+- PostgreSQL-backed Insight Library
+- Docker deployment on Render
 
-App nội bộ cho team Content:
-- Paste text -> AI rút insight
-- Upload ảnh -> đọc text trong ảnh + hiểu visual -> rút insight
-- Upload video -> tách audio để transcript + lấy frame hình ảnh -> rút insight
-- Lưu Insight Library bằng SQLite
-- Search, status New / Approved / Used / Archived
+## Recommended deploy: Render Blueprint
 
-## 1. Cài đặt
+This repository includes:
+- `Dockerfile` — installs Python dependencies + ffmpeg
+- `render.yaml` — creates the web service and Render Postgres
+- `/health` — Render health check endpoint
 
-Yêu cầu: Python 3.10+ và ffmpeg (nếu phân tích video).
+### Deploy steps
+
+1. Upload/commit all files in this repository to GitHub.
+2. Sign in to Render.
+3. New -> Blueprint.
+4. Connect the GitHub repository containing this app.
+5. Render reads `render.yaml` and proposes:
+   - `content-insight-hub` web service
+   - `content-insight-db` PostgreSQL database
+6. Enter the required `OPENAI_API_KEY` secret when prompted.
+7. Apply/Deploy the Blueprint.
+8. After deployment, open the generated `*.onrender.com` URL.
+
+Do not commit your OpenAI API key to GitHub.
+
+## Local run
+
+Without `DATABASE_URL`, the app automatically falls back to local SQLite.
 
 ```bash
-cd content_insight_app
 python -m venv .venv
-source .venv/bin/activate        # macOS/Linux
-# .venv\Scripts\activate         # Windows
-
+source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-Cài ffmpeg:
-- macOS: `brew install ffmpeg`
-- Ubuntu: `sudo apt install ffmpeg`
-- Windows: cài ffmpeg và thêm vào PATH.
-
-## 2. API key
-
-macOS/Linux:
-```bash
 export OPENAI_API_KEY="..."
-```
-
-Windows PowerShell:
-```powershell
-$env:OPENAI_API_KEY="..."
-```
-
-Có thể đổi model bằng env:
-```bash
-export OPENAI_TEXT_MODEL="gpt-5-mini"
-export OPENAI_VISION_MODEL="gpt-5-mini"
-export OPENAI_TRANSCRIBE_MODEL="gpt-4o-mini-transcribe"
-```
-
-## 3. Chạy app
-
-```bash
 python app.py
 ```
 
-Mở: http://localhost:5000
-
-## Đưa cho team dùng chung
-
-MVP có thể deploy lên Render/Railway/Fly.io/VPS. Khi deploy:
-- Dùng persistent disk cho `insights.db`
-- Giới hạn quyền truy cập nội bộ
-- Không đưa OPENAI_API_KEY vào frontend
-- Với lượng video lớn: chuyển upload sang object storage (S3/R2) và xử lý qua job queue
-- Với nhiều user: thêm login + bảng users/workspaces
-
-## Nâng cấp nên làm tiếp
-
-1. User login + tên người submit insight
-2. Folder/brand/campaign
-3. Link TikTok/Instagram/YouTube -> ingest tự động (tuỳ API/quyền truy cập)
-4. Duplicate detection / semantic search
-5. Insight score: Novelty / Relevance / Actionability
-6. Từ insight -> Brief -> Hook -> Script -> Content Calendar
-7. Slack/Telegram notification khi có insight Approved
+Video analysis needs ffmpeg installed locally.

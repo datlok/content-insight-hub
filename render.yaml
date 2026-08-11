@@ -18,6 +18,8 @@ services:
         value: gpt-5-mini
       - key: OPENAI_TRANSCRIBE_MODEL
         value: gpt-4o-mini-transcribe
+      - key: OPENAI_IMAGE_MODEL
+        value: gpt-image-2
 
 databases:
   - name: content-insight-db
