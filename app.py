@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import requests
 from flask import Flask, render_template, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from PIL import Image
 
 APP_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = Path(tempfile.gettempdir()) / "content_insight_uploads"
@@ -300,34 +301,84 @@ Trước khi trả kết quả, tự kiểm tra:
     raw = openai_response([{"type":"input_text","text":prompt}], TEXT_MODEL)
     return parse_json_loose(raw)
 
-def generate_design_from_refs(ref_path, photo_path, instruction, size="1024x1024"):
+def choose_generation_size(width, height):
+    ratio = width / max(height, 1)
+    if ratio >= 1.25:
+        return "1536x1024"
+    if ratio <= 0.8:
+        return "1024x1536"
+    return "1024x1024"
+
+def crop_resize_to_target(image_bytes, width, height):
+    src_fd, src_name = tempfile.mkstemp(suffix=".png")
+    out_fd, out_name = tempfile.mkstemp(suffix=".png")
+    os.close(src_fd)
+    os.close(out_fd)
+    src_path = Path(src_name)
+    out_path = Path(out_name)
+    try:
+        src_path.write_bytes(image_bytes)
+        with Image.open(src_path) as im:
+            im = im.convert("RGB")
+            target_ratio = width / max(height, 1)
+            src_ratio = im.width / max(im.height, 1)
+            if src_ratio > target_ratio:
+                new_w = int(im.height * target_ratio)
+                left = max((im.width - new_w) // 2, 0)
+                im = im.crop((left, 0, left + new_w, im.height))
+            elif src_ratio < target_ratio:
+                new_h = int(im.width / target_ratio)
+                top = max((im.height - new_h) // 2, 0)
+                im = im.crop((0, top, im.width, top + new_h))
+            im = im.resize((width, height), Image.Resampling.LANCZOS)
+            im.save(out_path, format="PNG", optimize=True)
+        return out_path.read_bytes()
+    finally:
+        src_path.unlink(missing_ok=True)
+        out_path.unlink(missing_ok=True)
+
+def generate_design_from_refs(ref_path, photo_paths, instruction, width=1600, height=800):
     if not OPENAI_API_KEY:
         raise RuntimeError("Chưa cấu hình OPENAI_API_KEY trên Render.")
-    prompt = f"""Tạo một social design MỚI dựa trên hai ảnh input.
+    photo_paths = list(photo_paths or [])
+    if not photo_paths:
+        raise RuntimeError("Chưa có ảnh chụp của team.")
 
-Ảnh 1 = REFERENCE DESIGN:
+    prompt = f"""Tạo một social design MỚI dựa trên các ảnh input.
+
+Ảnh đầu tiên = REFERENCE DESIGN:
 - Học bố cục, hierarchy, spacing, typography treatment, màu sắc và mood.
-- Không sao chép logo, watermark, tên thương hiệu hoặc nội dung chữ từ reference.
+- Không sao chép logo, watermark, tên thương hiệu hoặc text từ reference.
 
-Ảnh 2 = ẢNH CHỤP CỦA TEAM:
-- Đây là chủ thể/nội dung chính phải dùng trong thiết kế mới.
-- Giữ nhận diện và chi tiết quan trọng của ảnh này tốt nhất có thể.
+Các ảnh còn lại = ẢNH CHỤP CỦA TEAM:
+- Đây là nguồn hình ảnh chính.
+- Có thể chọn một hoặc phối hợp nhiều ảnh nếu phù hợp layout.
+- Ưu tiên giữ nhận diện khuôn mặt, trang phục, sản phẩm và chi tiết quan trọng.
+- Không tự thay người hoặc làm biến dạng chủ thể nếu không được yêu cầu.
 
 YÊU CẦU:
 {instruction}
 
-Tạo thiết kế mới có tinh thần/layout tham khảo từ ảnh 1 nhưng dùng ảnh 2 làm nội dung chính.
+OUTPUT MONG MUỐN:
+- Kích thước cuối: {width}x{height}px.
+- Tỷ lệ: {width}:{height}.
+- Bố cục phải được thiết kế ngay từ đầu để phù hợp tỷ lệ này.
+- Giữ text/chủ thể quan trọng trong vùng an toàn để crop cuối không cắt mất.
+
 Nếu có text tiếng Việt, ưu tiên rõ, đúng chính tả và hierarchy tốt."""
+
+    gen_size = choose_generation_size(width, height)
     handles, files = [], []
     try:
-        for p in [ref_path, photo_path]:
+        for p in [ref_path] + photo_paths:
             h = open(p, "rb")
             handles.append(h)
             files.append(("image[]", (Path(p).name, h, mimetypes.guess_type(str(p))[0] or "image/png")))
+
         r = requests.post(
             "https://api.openai.com/v1/images/edits",
             headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
-            data={"model": IMAGE_MODEL, "prompt": prompt, "size": size, "quality": "medium"},
+            data={"model": IMAGE_MODEL, "prompt": prompt, "size": gen_size, "quality": "medium"},
             files=files,
             timeout=420,
         )
@@ -336,7 +387,9 @@ Nếu có text tiếng Việt, ưu tiên rõ, đúng chính tả và hierarchy t
         b64 = r.json().get("data", [{}])[0].get("b64_json")
         if not b64:
             raise RuntimeError("Image API không trả về ảnh.")
-        return b64
+
+        final_bytes = crop_resize_to_target(base64.b64decode(b64), width, height)
+        return base64.b64encode(final_bytes).decode("ascii")
     finally:
         for h in handles:
             try:
@@ -450,33 +503,52 @@ def write_content_route():
 @app.post("/api/generate-design")
 def generate_design_route():
     ref = request.files.get("reference")
-    photo = request.files.get("photo")
+    photos = [f for f in request.files.getlist("photos") if f and f.filename]
     instruction = (request.form.get("instruction") or "").strip()
-    size = (request.form.get("size") or "1024x1024").strip()
+
+    try:
+        width = int(request.form.get("width") or 1600)
+        height = int(request.form.get("height") or 800)
+    except ValueError:
+        return jsonify({"error": "Width và Height phải là số nguyên."}), 400
 
     if not ref or not ref.filename:
         return jsonify({"error": "Hãy upload ảnh reference design."}), 400
-    if not photo or not photo.filename:
-        return jsonify({"error": "Hãy upload ảnh chụp bên mình."}), 400
+    if not photos:
+        return jsonify({"error": "Hãy upload ít nhất 1 ảnh chụp bên mình."}), 400
+    if len(photos) > 10:
+        return jsonify({"error": "Tối đa 10 ảnh chụp cho một lần tạo design."}), 400
     if not instruction:
         return jsonify({"error": "Hãy nhập yêu cầu thiết kế."}), 400
-    if size not in ["1024x1024", "1536x1024", "1024x1536"]:
-        size = "1024x1024"
+    if width < 512 or height < 512 or width > 4096 or height > 4096:
+        return jsonify({"error": "Kích thước mỗi chiều phải từ 512 đến 4096 px."}), 400
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     ref_path = UPLOAD_DIR / f"ref_{stamp}_{re.sub(r'[^A-Za-z0-9._ -]+', '_', ref.filename)}"
-    photo_path = UPLOAD_DIR / f"photo_{stamp}_{re.sub(r'[^A-Za-z0-9._ -]+', '_', photo.filename)}"
     ref.save(ref_path)
-    photo.save(photo_path)
+    photo_paths = []
 
     try:
-        b64 = generate_design_from_refs(ref_path, photo_path, instruction, size)
-        return jsonify({"image_base64": b64, "mime": "image/png"})
+        for idx, photo in enumerate(photos, start=1):
+            name = re.sub(r'[^A-Za-z0-9._ -]+', '_', photo.filename)
+            p = UPLOAD_DIR / f"photo_{stamp}_{idx}_{name}"
+            photo.save(p)
+            photo_paths.append(p)
+
+        b64 = generate_design_from_refs(ref_path, photo_paths, instruction, width=width, height=height)
+        return jsonify({
+            "image_base64": b64,
+            "mime": "image/png",
+            "width": width,
+            "height": height,
+            "photo_count": len(photo_paths),
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
         ref_path.unlink(missing_ok=True)
-        photo_path.unlink(missing_ok=True)
+        for p in photo_paths:
+            p.unlink(missing_ok=True)
 
 @app.post("/api/insights/<int:item_id>/status")
 def set_status(item_id):
