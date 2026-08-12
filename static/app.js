@@ -87,8 +87,7 @@ function renderInsight(d) {
       <div class="kicker">Core insight</div>
       <div class="core">${esc(i.core_insight || "")}</div>
 
-      <button class="write-btn"
-        onclick="openWriterAndGenerate(decodeURIComponent('${ctx}'))">
+      <button class="write-btn js-write-insight" data-context="${ctx}">
         ✎ Viết ngay 2 phiên bản
       </button>
 
@@ -167,7 +166,7 @@ async function loadLibrary() {
         const ctx = encodeURIComponent(buildWriterContext(x));
 
         return `
-          <article class="lib">
+          <article class="lib" data-id="${x.id}">
             <div class="lib-top">
               <span>${esc((x.source_type || "").toUpperCase())} · ${esc(x.source_name || "")}</span>
               <span>${esc((x.created_at || "").slice(0, 10))}</span>
@@ -179,18 +178,17 @@ async function loadLibrary() {
               ${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}
             </div>
 
-            <button class="write-btn"
-              onclick="openWriterAndGenerate(decodeURIComponent('${ctx}'))">
+            <button class="write-btn js-write-insight" data-context="${ctx}">
               ✎ Viết ngay 2 phiên bản
             </button>
 
             <footer>
-              <select onchange="setStatus(${x.id}, this.value)">
+              <select class="js-status">
                 ${["New", "Approved", "Used", "Archived"]
                   .map((s) => `<option ${x.status === s ? "selected" : ""}>${s}</option>`)
                   .join("")}
               </select>
-              <button class="delete" onclick="delInsight(${x.id})">Xóa</button>
+              <button class="delete js-delete">Xóa</button>
             </footer>
           </article>`;
       }).join("")
@@ -210,19 +208,43 @@ window.openWriterAndGenerate = async (text) => {
   await generateContentNow();
 };
 
-window.setStatus = async (id, status) => {
+document.addEventListener("click", async (event) => {
+  const writeButton = event.target.closest(".js-write-insight");
+  if (writeButton) {
+    event.preventDefault();
+    const context = decodeURIComponent(writeButton.dataset.context || "");
+    await window.openWriterAndGenerate(context);
+    return;
+  }
+
+  const deleteButton = event.target.closest(".js-delete");
+  if (deleteButton) {
+    event.preventDefault();
+    const card = deleteButton.closest(".lib");
+    const id = card?.dataset.id;
+    if (!id || !confirm("Xóa insight này?")) return;
+
+    await fetch(`/api/insights/${id}`, { method: "DELETE" });
+    await loadLibrary();
+  }
+});
+
+document.addEventListener("change", async (event) => {
+  const statusSelect = event.target.closest(".js-status");
+  if (!statusSelect) return;
+
+  const card = statusSelect.closest(".lib");
+  const id = card?.dataset.id;
+  if (!id) return;
+
   await fetch(`/api/insights/${id}/status`, {
     method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({status})
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: statusSelect.value })
   });
-};
+});
 
-window.delInsight = async (id) => {
-  if (!confirm("Xóa insight này?")) return;
-  await fetch(`/api/insights/${id}`, {method: "DELETE"});
-  loadLibrary();
-};
+
 
 $("#refresh").onclick = loadLibrary;
 $("#search").oninput = () => {
