@@ -396,6 +396,95 @@ $("#generateDesign").onclick=async()=>{
   }catch(e){showErr("#designResult",e.message)}
   finally{loading("#designLoading",false)}
 };
+
+// ===== CLIPBOARD IMAGE PASTE =====
+let activePasteTarget = "reference";
+
+function clipboardImageToFile(blob, prefix = "pasted-image") {
+  let ext = "png";
+  if (blob.type === "image/jpeg") ext = "jpg";
+  else if (blob.type === "image/webp") ext = "webp";
+
+  return new File(
+    [blob],
+    `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,7)}.${ext}`,
+    { type: blob.type || "image/png" }
+  );
+}
+
+function setReferenceFromClipboard(file) {
+  designRefFile = file;
+
+  const img = $("#refPreview");
+  img.src = URL.createObjectURL(file);
+
+  const drop = img.closest(".image-drop");
+  if (drop) drop.classList.add("has-image");
+}
+
+function addPhotosFromClipboard(files) {
+  const availableSlots = Math.max(10 - designPhotoFiles.length, 0);
+  if (!availableSlots) {
+    showErr("#designResult", "Đã đủ tối đa 10 ảnh chụp.");
+    return;
+  }
+
+  designPhotoFiles.push(...files.slice(0, availableSlots));
+  renderPhotoPreviews(designPhotoFiles);
+}
+
+const refDropZone = $("#designRef")?.closest(".image-drop");
+const photosDropZone = $("#designPhotos")?.closest(".image-drop");
+
+if (refDropZone) {
+  refDropZone.addEventListener("click", () => {
+    activePasteTarget = "reference";
+  });
+}
+
+if (photosDropZone) {
+  photosDropZone.addEventListener("click", () => {
+    activePasteTarget = "photos";
+  });
+}
+
+document.addEventListener("paste", (event) => {
+  const designView = $("#design");
+  if (!designView || !designView.classList.contains("active")) return;
+  if (!event.clipboardData) return;
+
+  const pastedImages = [];
+
+  for (const item of event.clipboardData.items) {
+    if (!item.type || !item.type.startsWith("image/")) continue;
+
+    const blob = item.getAsFile();
+    if (blob) {
+      pastedImages.push(clipboardImageToFile(blob));
+    }
+  }
+
+  if (!pastedImages.length) return;
+
+  event.preventDefault();
+
+  if (activePasteTarget === "reference") {
+    const first = pastedImages.shift();
+
+    if (first) {
+      setReferenceFromClipboard(first);
+    }
+
+    // Nếu clipboard chứa nhiều ảnh, ảnh đầu là ref,
+    // các ảnh còn lại tự động được thêm sang ảnh bên mình.
+    if (pastedImages.length) {
+      addPhotosFromClipboard(pastedImages);
+    }
+  } else {
+    addPhotosFromClipboard(pastedImages);
+  }
+});
+
 updateRatioDisplay();
 
 
