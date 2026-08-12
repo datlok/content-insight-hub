@@ -60,26 +60,55 @@
 </section>
 
 <section id="design" class="view">
-<header><div><h1>Design Creator</h1><p>Ảnh ref Pinterest + ảnh bên mình + yêu cầu → design mới.</p></div><span class="pill">GPT Image</span></header>
+<header><div><h1>Design Creator</h1><p>Ảnh ref Pinterest + nhiều ảnh bên mình + yêu cầu → design mới.</p></div><span class="pill">GPT Image</span></header>
 <div class="card section-card">
   <div class="image-pair">
-    <div><label class="field-label">1. Ảnh ref design Pinterest</label>
-      <label class="image-drop"><input id="designRef" type="file" accept="image/*"><img id="refPreview"><div class="empty-preview"><b>＋ Upload reference</b><span>Layout / typography / mood</span></div></label>
+    <div>
+      <label class="field-label">1. Ảnh ref design Pinterest</label>
+      <label class="image-drop">
+        <input id="designRef" type="file" accept="image/*">
+        <img id="refPreview">
+        <div class="empty-preview"><b>＋ Upload reference</b><span>Layout / typography / mood</span></div>
+      </label>
     </div>
-    <div><label class="field-label">2. Ảnh chụp bên mình</label>
-      <label class="image-drop"><input id="designPhoto" type="file" accept="image/*"><img id="photoPreview"><div class="empty-preview"><b>＋ Upload ảnh chụp</b><span>Ảnh chính đưa vào design</span></div></label>
+    <div>
+      <label class="field-label">2. Ảnh chụp bên mình — chọn nhiều ảnh</label>
+      <label class="image-drop multi-photo-drop">
+        <input id="designPhotos" type="file" accept="image/*" multiple>
+        <div id="photoPreviewGrid" class="photo-preview-grid"></div>
+        <div class="empty-preview" id="photoEmpty"><b>＋ Upload nhiều ảnh</b><span>Tối đa 10 ảnh/lần</span></div>
+      </label>
+      <div id="photoCount" class="file-meta"></div>
     </div>
   </div>
+
   <label class="field-label">3. Yêu cầu thiết kế</label>
-  <textarea id="designInstruction" class="design-request" placeholder="Ví dụ: giữ tinh thần layout ref, thay ảnh chính bằng ảnh bên mình, text SUMMER SALE, tone beige premium…"></textarea>
-  <div class="form-row"><div><label class="field-label">Tỷ lệ</label><select id="designSize"><option value="1024x1024">1:1 Square</option><option value="1024x1536">2:3 Vertical</option><option value="1536x1024">3:2 Horizontal</option></select></div></div>
-  <div class="actions"><span class="hint">Không bê nguyên watermark/logo từ ref.</span><button class="primary" id="generateDesign">Tạo design →</button></div>
+  <textarea id="designInstruction" class="design-request" placeholder="Ví dụ: giữ tinh thần layout ref, chọn 2–3 ảnh phù hợp nhất trong loạt ảnh bên mình, text SUMMER SALE, tone beige premium…"></textarea>
+
+  <div class="size-panel">
+    <div class="size-head">
+      <div><label class="field-label">4. Kích thước output</label><div class="hint">Ưu tiên mặc định 2:1.</div></div>
+      <button type="button" class="ratio-btn active" data-ratio="2:1">2:1</button>
+      <button type="button" class="ratio-btn" data-ratio="1:1">1:1</button>
+      <button type="button" class="ratio-btn" data-ratio="9:16">9:16</button>
+      <button type="button" class="ratio-btn" data-ratio="16:9">16:9</button>
+    </div>
+
+    <div class="dimension-row">
+      <div><label class="field-label">Width (px)</label><input id="designWidth" class="dimension-input" type="number" min="512" max="4096" value="1600"></div>
+      <div class="dimension-x">×</div>
+      <div><label class="field-label">Height (px)</label><input id="designHeight" class="dimension-input" type="number" min="512" max="4096" value="800"></div>
+      <div id="ratioDisplay" class="ratio-display">2:1</div>
+    </div>
+  </div>
+
+  <div class="actions"><span class="hint">Output cuối được crop/resize chính xác theo Width × Height.</span><button class="primary" id="generateDesign">Tạo design →</button></div>
 </div>
 <div id="designLoading" class="loading hidden"><span></span><div><b>Đang tạo design…</b><small>Có thể mất vài chục giây.</small></div></div>
 <div id="designResult"></div>
 </section>
 </main>
 </div>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=2130"></script>
 </body>
 </html>
