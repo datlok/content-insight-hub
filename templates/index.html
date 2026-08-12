@@ -11,8 +11,8 @@
   <nav>
     <button class="nav active" data-view="inbox">＋ Add Insight</button>
     <button class="nav" data-view="library">▦ Insight Library</button>
-    <button class="nav" data-view="writer">✎ Content Writer</button>
-    <button class="nav" data-view="design">◇ Design Creator</button>
+    <button class="nav" data-view="writer">✎ Content Writer</button><button class="nav" data-view="contentlib">▤ Content Library</button>
+    <button class="nav" data-view="design">◇ Design Creator</button><button class="nav" data-view="designlib">▧ Design Library</button>
   </nav>
   <div class="aside-note">Source → Insight → Content → Design.</div>
 </aside>
@@ -44,7 +44,7 @@
 
 <section id="writer" class="view">
 <header><div><h1>Content Writer</h1><p>Từ insight → tự viết ngay 2 phiên bản có thể đăng.</p></div><span class="pill">2 versions</span></header>
-<div class="card section-card">
+<div id="linkedContentNotice" class="linked-notice hidden"></div><div class="card section-card">
   <label class="field-label">Insight / ý chính</label>
   <textarea id="writerInsight" class="writer-textarea" placeholder="Paste insight hoặc bấm Viết content từ Insight Library…"></textarea>
   <div class="form-row">
@@ -57,6 +57,17 @@
 </div>
 <div id="writerLoading" class="loading hidden"><span></span><div><b>Đang viết content…</b></div></div>
 <div id="writerResult" class="content-results"></div>
+</section>
+
+
+<section id="contentlib" class="view">
+<header><div><h1>Content Library</h1><p>Content đã tạo; design tạo từ content sẽ nằm chung tại đây.</p></div></header>
+<div id="contentLibraryGrid" class="content-library-grid"></div>
+</section>
+
+<section id="designlib" class="view">
+<header><div><h1>Design Library</h1><p>Chỉ lưu design được tạo độc lập.</p></div></header>
+<div id="designLibraryGrid" class="design-library-grid"></div>
 </section>
 
 <section id="design" class="view">
@@ -109,6 +120,6 @@
 </section>
 </main>
 </div>
-<script src="/static/app.js?v=2130"></script>
+<script src="/static/app.js?v=2140"></script>
 </body>
 </html>
