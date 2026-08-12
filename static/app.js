@@ -5,11 +5,14 @@ const $$ = (s) => document.querySelectorAll(s);
 let selectedFile = null;
 let designRefFile = null;
 let designPhotoFiles = [];
+let linkedDraftId = null;
 
 function switchView(id) {
   $$(".nav").forEach((x) => x.classList.toggle("active", x.dataset.view === id));
   $$(".view").forEach((x) => x.classList.toggle("active", x.id === id));
   if (id === "library") loadLibrary();
+  if (id === "contentlib") loadContentLibrary();
+  if (id === "designlib") loadDesignLibrary();
 }
 
 $$(".nav").forEach((b) => {
@@ -276,18 +279,30 @@ async function generateContentNow() {
 
     $("#writerResult").innerHTML = [d.short_hook || {}, d.sales_cta || {}]
       .map((x, i) => `
-        <div class="content-version card">
+        <div class="content-version card" data-draft-id="${x.draft_id || ""}">
           <div class="kicker">Version ${i + 1}</div>
           <h3>${esc(x.title || "")}</h3>
           <div class="content-body">${esc(x.content || "")}</div>
-          <button class="copy-btn" data-copy="${encodeURIComponent(x.content || "")}">
-            Copy
-          </button>
+          <div class="content-actions">
+            <button class="copy-btn" data-copy="${encodeURIComponent(x.content || "")}">Copy</button>
+            <button class="create-image-btn" data-draft-id="${x.draft_id || ""}" data-content="${encodeURIComponent(x.content || "")}">◇ Tạo ảnh</button>
+          </div>
         </div>`)
       .join("");
 
     $$(".copy-btn").forEach((b) => {
       b.onclick = () => navigator.clipboard.writeText(decodeURIComponent(b.dataset.copy));
+    });
+    $$(".create-image-btn").forEach((b) => {
+      b.onclick = () => {
+        linkedDraftId = parseInt(b.dataset.draftId || "0", 10) || null;
+        const contentText = decodeURIComponent(b.dataset.content || "");
+        $("#designInstruction").value = `Tạo visual/design phù hợp cho content sau:\n\n${contentText}\n\nƯu tiên visual hỗ trợ đúng thông điệp, không nhồi quá nhiều chữ.`;
+        $("#linkedContentNotice").classList.remove("hidden");
+        $("#linkedContentNotice").textContent = `Đang tạo ảnh cho Content #${linkedDraftId}. Ảnh tạo xong sẽ lưu trong Content Library.`;
+        switchView("design");
+        window.scrollTo(0,0);
+      };
     });
 
   } catch (e) {
@@ -372,6 +387,7 @@ $("#generateDesign").onclick=async()=>{
     fd.append("instruction",instruction);
     fd.append("width",String(width));
     fd.append("height",String(height));
+    if(linkedDraftId)fd.append("draft_id",String(linkedDraftId));
     const r=await fetch("/api/generate-design",{method:"POST",body:fd});
     const d=await r.json();
     if(!r.ok)throw new Error(d.error||"Có lỗi");
@@ -381,3 +397,58 @@ $("#generateDesign").onclick=async()=>{
   finally{loading("#designLoading",false)}
 };
 updateRatioDisplay();
+
+
+document.addEventListener("click", (event) => {
+  const nav = event.target.closest('.nav[data-view="design"]');
+  if (nav) {
+    linkedDraftId = null;
+    const notice = $("#linkedContentNotice");
+    if (notice) {
+      notice.classList.add("hidden");
+      notice.textContent = "";
+    }
+  }
+});
+
+async function loadContentLibrary(){
+  const r=await fetch("/api/content-library");
+  const rows=await r.json();
+  $("#contentLibraryGrid").innerHTML=rows.length?rows.map(x=>`
+    <article class="content-lib-card card" data-id="${x.id}">
+      <div class="lib-top"><span>${esc((x.platform||"").toUpperCase())} · ${esc(x.version_type||"")}</span><span>${esc((x.created_at||"").slice(0,10))}</span></div>
+      <h3>${esc(x.title||"")}</h3>
+      <div class="content-body clamp-content">${esc(x.content||"")}</div>
+      ${x.has_image?`<img class="content-lib-image" src="/api/content-library/${x.id}/image" alt="Content design">`:`<div class="no-image-note">Chưa có ảnh cho content này.</div>`}
+      <div class="content-actions">
+        <button class="library-image-btn" data-id="${x.id}" data-content="${encodeURIComponent(x.content||"")}">${x.has_image?"◇ Tạo lại ảnh":"◇ Tạo ảnh"}</button>
+        <select class="content-status">${["Draft","Approved","Posted","Archived"].map(s=>`<option ${x.status===s?"selected":""}>${s}</option>`).join("")}</select>
+      </div>
+    </article>`).join(""):`<div class="hint">Chưa có content nào.</div>`;
+
+  $$(".library-image-btn").forEach(b=>b.onclick=()=>{
+    linkedDraftId=parseInt(b.dataset.id||"0",10)||null;
+    const contentText=decodeURIComponent(b.dataset.content||"");
+    $("#designInstruction").value=`Tạo visual/design phù hợp cho content sau:\n\n${contentText}\n\nƯu tiên visual hỗ trợ đúng thông điệp, không nhồi quá nhiều chữ.`;
+    $("#linkedContentNotice").classList.remove("hidden");
+    $("#linkedContentNotice").textContent=`Đang tạo ảnh cho Content #${linkedDraftId}. Ảnh tạo xong sẽ lưu trong Content Library.`;
+    switchView("design");window.scrollTo(0,0);
+  });
+  $$(".content-status").forEach(s=>s.onchange=async()=>{
+    const id=s.closest(".content-lib-card").dataset.id;
+    await fetch(`/api/content-library/${id}/status`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:s.value})});
+  });
+}
+
+async function loadDesignLibrary(){
+  const r=await fetch("/api/design-library");
+  const rows=await r.json();
+  $("#designLibraryGrid").innerHTML=rows.length?rows.map(x=>`
+    <article class="design-lib-card card">
+      <img src="/api/design-library/${x.id}/image" alt="Design">
+      <div class="design-lib-meta">
+        <div class="kicker">${x.width}×${x.height}px · ${x.photo_count} ảnh nguồn</div>
+        <p>${esc(x.instruction||"")}</p>
+      </div>
+    </article>`).join(""):`<div class="hint">Chưa có design độc lập nào.</div>`;
+}
