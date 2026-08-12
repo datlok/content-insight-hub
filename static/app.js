@@ -4,7 +4,7 @@ const $$ = (s) => document.querySelectorAll(s);
 
 let selectedFile = null;
 let designRefFile = null;
-let designPhotoFile = null;
+let designPhotoFiles = [];
 
 function switchView(id) {
   $$(".nav").forEach((x) => x.classList.toggle("active", x.dataset.view === id));
@@ -299,61 +299,85 @@ async function generateContentNow() {
 
 $("#generateContent").onclick = generateContentNow;
 
-function preview(input, imgSel) {
+
+function previewSingle(input, imgSel) {
   const f = input.files[0];
   if (!f) return null;
-
   const img = $(imgSel);
   img.src = URL.createObjectURL(f);
   img.parentElement.classList.add("has-image");
   return f;
 }
+$("#designRef").onchange = (e) => { designRefFile = previewSingle(e.target, "#refPreview"); };
 
-$("#designRef").onchange = (e) => {
-  designRefFile = preview(e.target, "#refPreview");
-};
-
-$("#designPhoto").onchange = (e) => {
-  designPhotoFile = preview(e.target, "#photoPreview");
-};
-
-$("#generateDesign").onclick = async () => {
-  const instruction = $("#designInstruction").value.trim();
-
-  if (!designRefFile) return showErr("#designResult", "Hãy upload ảnh reference design.");
-  if (!designPhotoFile) return showErr("#designResult", "Hãy upload ảnh chụp bên mình.");
-  if (!instruction) return showErr("#designResult", "Hãy nhập yêu cầu thiết kế.");
-
-  loading("#designLoading", true);
-  $("#designResult").innerHTML = "";
-
-  try {
-    const fd = new FormData();
-    fd.append("reference", designRefFile);
-    fd.append("photo", designPhotoFile);
-    fd.append("instruction", instruction);
-    fd.append("size", $("#designSize").value);
-
-    const r = await fetch("/api/generate-design", {
-      method: "POST",
-      body: fd
-    });
-
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || "Có lỗi");
-
-    const src = `data:${d.mime || "image/png"};base64,${d.image_base64}`;
-
-    $("#designResult").innerHTML = `
-      <div class="generated-design card">
-        <img src="${src}" alt="Generated design">
-        <br>
-        <a class="download-btn" href="${src}" download="design.png">↓ Lưu ảnh</a>
-      </div>`;
-
-  } catch (e) {
-    showErr("#designResult", e.message);
-  } finally {
-    loading("#designLoading", false);
+function renderPhotoPreviews(files) {
+  const grid = $("#photoPreviewGrid");
+  const empty = $("#photoEmpty");
+  const count = $("#photoCount");
+  grid.innerHTML = "";
+  if (!files.length) {
+    empty.style.display = "grid";
+    count.textContent = "";
+    return;
   }
+  empty.style.display = "none";
+  count.textContent = `${files.length} ảnh đã chọn`;
+  files.forEach((file, index) => {
+    const item = document.createElement("div");
+    item.className = "photo-thumb";
+    item.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="Photo ${index + 1}"><span>${index + 1}</span>`;
+    grid.appendChild(item);
+  });
+}
+$("#designPhotos").onchange = (e) => {
+  designPhotoFiles = Array.from(e.target.files || []).slice(0, 10);
+  renderPhotoPreviews(designPhotoFiles);
 };
+
+function gcd(a,b){a=Math.abs(a);b=Math.abs(b);while(b)[a,b]=[b,a%b];return a||1;}
+function updateRatioDisplay(){
+  const w=parseInt($("#designWidth").value||"0",10);
+  const h=parseInt($("#designHeight").value||"0",10);
+  if(!w||!h){$("#ratioDisplay").textContent="—";return;}
+  const d=gcd(w,h);
+  $("#ratioDisplay").textContent=`${w/d}:${h/d}`;
+}
+$("#designWidth").oninput=updateRatioDisplay;
+$("#designHeight").oninput=updateRatioDisplay;
+
+$$(".ratio-btn").forEach((btn)=>{
+  btn.onclick=()=>{
+    $$(".ratio-btn").forEach((b)=>b.classList.remove("active"));
+    btn.classList.add("active");
+    const presets={"2:1":[1600,800],"1:1":[1200,1200],"9:16":[1080,1920],"16:9":[1920,1080]};
+    const [w,h]=presets[btn.dataset.ratio];
+    $("#designWidth").value=w; $("#designHeight").value=h; updateRatioDisplay();
+  };
+});
+
+$("#generateDesign").onclick=async()=>{
+  const instruction=$("#designInstruction").value.trim();
+  const width=parseInt($("#designWidth").value||"0",10);
+  const height=parseInt($("#designHeight").value||"0",10);
+  if(!designRefFile)return showErr("#designResult","Hãy upload ảnh reference design.");
+  if(!designPhotoFiles.length)return showErr("#designResult","Hãy upload ít nhất 1 ảnh chụp bên mình.");
+  if(!instruction)return showErr("#designResult","Hãy nhập yêu cầu thiết kế.");
+  if(!width||!height||width<512||height<512||width>4096||height>4096)return showErr("#designResult","Width và Height phải từ 512 đến 4096 px.");
+
+  loading("#designLoading",true); $("#designResult").innerHTML="";
+  try{
+    const fd=new FormData();
+    fd.append("reference",designRefFile);
+    designPhotoFiles.forEach((file)=>fd.append("photos",file));
+    fd.append("instruction",instruction);
+    fd.append("width",String(width));
+    fd.append("height",String(height));
+    const r=await fetch("/api/generate-design",{method:"POST",body:fd});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||"Có lỗi");
+    const src=`data:${d.mime||"image/png"};base64,${d.image_base64}`;
+    $("#designResult").innerHTML=`<div class="generated-design card"><div class="kicker">Generated design · ${d.width}×${d.height}px · ${d.photo_count} ảnh nguồn</div><img src="${src}" alt="Generated design"><br><a class="download-btn" href="${src}" download="design_${d.width}x${d.height}.png">↓ Lưu ảnh</a></div>`;
+  }catch(e){showErr("#designResult",e.message)}
+  finally{loading("#designLoading",false)}
+};
+updateRatioDisplay();
