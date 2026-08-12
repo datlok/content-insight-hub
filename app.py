@@ -74,6 +74,64 @@ class Insight(db.Model):
             "status": self.status or "New",
         }
 
+
+class ContentDraft(db.Model):
+    __tablename__ = "content_drafts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    insight_id = db.Column(db.Integer, db.ForeignKey("insights.id"), nullable=True)
+    version_type = db.Column(db.String(40), nullable=False)
+    title = db.Column(db.String(255))
+    content = db.Column(db.Text, nullable=False)
+    platform = db.Column(db.String(50))
+    objective = db.Column(db.String(50))
+    extra_request = db.Column(db.Text)
+    status = db.Column(db.String(30), default="Draft")
+    image_data = db.Column(db.LargeBinary, nullable=True)
+    image_mime = db.Column(db.String(50), nullable=True)
+    image_width = db.Column(db.Integer, nullable=True)
+    image_height = db.Column(db.Integer, nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "created_at": self.created_at.isoformat() if self.created_at else "",
+            "insight_id": self.insight_id,
+            "version_type": self.version_type,
+            "title": self.title or "",
+            "content": self.content or "",
+            "platform": self.platform or "",
+            "objective": self.objective or "",
+            "extra_request": self.extra_request or "",
+            "status": self.status or "Draft",
+            "has_image": bool(self.image_data),
+            "image_width": self.image_width,
+            "image_height": self.image_height,
+        }
+
+class DesignAsset(db.Model):
+    __tablename__ = "design_assets"
+
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    instruction = db.Column(db.Text)
+    width = db.Column(db.Integer)
+    height = db.Column(db.Integer)
+    photo_count = db.Column(db.Integer, default=1)
+    image_data = db.Column(db.LargeBinary, nullable=False)
+    image_mime = db.Column(db.String(50), default="image/png")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "created_at": self.created_at.isoformat() if self.created_at else "",
+            "instruction": self.instruction or "",
+            "width": self.width,
+            "height": self.height,
+            "photo_count": self.photo_count or 0,
+        }
+
 def init_db():
     with app.app_context():
         db.create_all()
@@ -487,17 +545,34 @@ def analyze_file_route():
 def write_content_route():
     data = request.get_json(force=True)
     insight = (data.get("insight") or "").strip()
+    platform = (data.get("platform") or "Facebook").strip()
+    objective = (data.get("objective") or "Bán hàng").strip()
+    extra_request = (data.get("extra_request") or "").strip()
+
     if not insight:
         return jsonify({"error": "Chưa có insight để viết content."}), 400
+
     try:
-        result = write_content_versions(
-            insight,
-            (data.get("platform") or "Facebook").strip(),
-            (data.get("objective") or "Bán hàng").strip(),
-            (data.get("extra_request") or "").strip(),
-        )
+        result = write_content_versions(insight, platform, objective, extra_request)
+        for key, version_type in [("short_hook", "organic"), ("sales_cta", "conversion")]:
+            item = result.get(key) or {}
+            draft = ContentDraft(
+                version_type=version_type,
+                title=item.get("title", ""),
+                content=item.get("content", ""),
+                platform=platform,
+                objective=objective,
+                extra_request=extra_request,
+                status="Draft",
+            )
+            db.session.add(draft)
+            db.session.flush()
+            item["draft_id"] = draft.id
+
+        db.session.commit()
         return jsonify(result)
     except Exception as e:
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
 @app.post("/api/generate-design")
@@ -505,6 +580,7 @@ def generate_design_route():
     ref = request.files.get("reference")
     photos = [f for f in request.files.getlist("photos") if f and f.filename]
     instruction = (request.form.get("instruction") or "").strip()
+    draft_id_raw = (request.form.get("draft_id") or "").strip()
 
     try:
         width = int(request.form.get("width") or 1600)
@@ -520,9 +596,8 @@ def generate_design_route():
         return jsonify({"error": "Tối đa 10 ảnh chụp cho một lần tạo design."}), 400
     if not instruction:
         return jsonify({"error": "Hãy nhập yêu cầu thiết kế."}), 400
-    if width < 512 or height < 512 or width > 4096 or height > 4096:
-        return jsonify({"error": "Kích thước mỗi chiều phải từ 512 đến 4096 px."}), 400
 
+    draft_id = int(draft_id_raw) if draft_id_raw.isdigit() else None
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     ref_path = UPLOAD_DIR / f"ref_{stamp}_{re.sub(r'[^A-Za-z0-9._ -]+', '_', ref.filename)}"
     ref.save(ref_path)
@@ -536,19 +611,83 @@ def generate_design_route():
             photo_paths.append(p)
 
         b64 = generate_design_from_refs(ref_path, photo_paths, instruction, width=width, height=height)
+        image_bytes = base64.b64decode(b64)
+
+        if draft_id:
+            draft = db.session.get(ContentDraft, draft_id)
+            if not draft:
+                return jsonify({"error": "Không tìm thấy content draft để gắn ảnh."}), 404
+            draft.image_data = image_bytes
+            draft.image_mime = "image/png"
+            draft.image_width = width
+            draft.image_height = height
+            library = "content"
+            saved_id = draft.id
+        else:
+            asset = DesignAsset(
+                instruction=instruction,
+                width=width,
+                height=height,
+                photo_count=len(photo_paths),
+                image_data=image_bytes,
+                image_mime="image/png",
+            )
+            db.session.add(asset)
+            db.session.flush()
+            library = "design"
+            saved_id = asset.id
+
+        db.session.commit()
         return jsonify({
             "image_base64": b64,
             "mime": "image/png",
             "width": width,
             "height": height,
             "photo_count": len(photo_paths),
+            "library": library,
+            "saved_id": saved_id,
         })
     except Exception as e:
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         ref_path.unlink(missing_ok=True)
         for p in photo_paths:
             p.unlink(missing_ok=True)
+
+
+@app.get("/api/content-library")
+def content_library():
+    rows = ContentDraft.query.order_by(ContentDraft.id.desc()).limit(200).all()
+    return jsonify([x.to_dict() for x in rows])
+
+@app.get("/api/content-library/<int:item_id>/image")
+def content_library_image(item_id):
+    item = db.session.get(ContentDraft, item_id)
+    if not item or not item.image_data:
+        return jsonify({"error": "Ảnh không tồn tại."}), 404
+    return app.response_class(item.image_data, mimetype=item.image_mime or "image/png")
+
+@app.post("/api/content-library/<int:item_id>/status")
+def content_library_status(item_id):
+    item = db.session.get(ContentDraft, item_id)
+    if not item:
+        return jsonify({"error": "Content không tồn tại."}), 404
+    item.status = (request.get_json(force=True).get("status") or "Draft")[:30]
+    db.session.commit()
+    return jsonify({"ok": True})
+
+@app.get("/api/design-library")
+def design_library():
+    rows = DesignAsset.query.order_by(DesignAsset.id.desc()).limit(200).all()
+    return jsonify([x.to_dict() for x in rows])
+
+@app.get("/api/design-library/<int:item_id>/image")
+def design_library_image(item_id):
+    item = db.session.get(DesignAsset, item_id)
+    if not item:
+        return jsonify({"error": "Design không tồn tại."}), 404
+    return app.response_class(item.image_data, mimetype=item.image_mime or "image/png")
 
 @app.post("/api/insights/<int:item_id>/status")
 def set_status(item_id):
